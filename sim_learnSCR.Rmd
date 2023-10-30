@@ -1,0 +1,212 @@
+---
+title: "sim_learn"
+author: "AJB"
+date: "2023-10-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Causal Diagram
+
+```{r}
+#install.packages("dagitty")
+library(dagitty)
+
+```
+
+
+```{r}
+
+simdi <- dagitty("dag {
+                Y <- W -> X
+                X -> Y
+                e -> X
+                }")
+
+# Manually set the coordinates for each node
+# The coordinates function expects a named list of x,y pairs
+
+coordinates(simdi) <- list(
+  x = c(X = 0, Y = 1, e = -1, W = 1),
+  y = c(X = 0, Y = 0, e = 0, W = -1)
+)
+# Now plot the DAG with the specified coordinates
+# Overlay bold labels
+
+plot(simdi, textsize = 5)
+
+
+```
+
+# Creating Data
+
+## installing tidyverse
+
+```{r}
+#install.packages("tidyverse")
+
+```
+
+## Creating data that follows Causal Diagram
+
+```{r}
+
+library(tidyverse)
+
+# W is continuous; X is binary; Y is continuous; e will be random noise
+
+# If we want the random data to be the same every time, set a seed
+set.seed(1000)
+
+# tibble() creates a tibble; it's like a data.frame
+# We must pick a number of observations, here 200
+
+d <- tibble(W = runif(200, 0, .1)) %>% # only go from 0 to 0.1
+  mutate(X = runif(200) < .2 + W) %>% # runif(200) is what creates e
+  mutate(Y = 3*X + W + rnorm(200)) # True effect of X on Y is 3
+
+
+
+```
+
+We can go one step further. Not only do we want to randomly create this data, we are going to want to do so a bunch of times as we repeatedly run our simulation. Any time we have code we want to run a bunch of times, it’s often a good idea to put it in its own function, which we can repeatedly call. We’ll also give this function an argument that lets us pick different sample sizes.
+
+```{r}
+# library(tidyverse)
+# Make sure the seed goes OUTSIDE the function. It makes the random 
+# data the same every time, but we want DIFFERENT results each time 
+# we run it (but the same set of different results, thus the seed)
+set.seed(1000)
+
+# Make a function with the function() function. The "N = 200" argument 
+# gives it an argument N that we'll use for sample size. The "=200" sets
+# the default sample size to 200
+
+create_data <- function(N = 200){
+  d <- tibble(W = runif(N, 0, 0.1)) %>%
+    mutate(X = runif(N) < 0.2 + W) %>%
+    mutate(Y = 3*X + W + rnorm(N))
+  
+  # Use return() to send our created data back
+  return(d)
+}
+
+# Run our function!
+
+d550 <- create_data(550)
+
+
+
+```
+
+
+# Creating Panel Data
+
+```{r}
+# library(tidyverse)
+set.seed(1000)
+
+# N for number of individuals, T for time periods
+
+create_panel_data <- function(N = 200, T = 10){
+  
+  # Create individual IDs with the crossing()
+  # function, which makes every combination of two vectors
+  # (if you want some to be incomplete, drop them later)
+  
+  panel_data <- crossing(ID = 1:N, t = 1:T) %>%
+    
+    # And individual/time-varying data
+    
+    # (n() means "the number of rows in this data"):
+    
+    mutate(W1 = runif(n(), 0, 0.1))
+  
+  
+    # Now an individual-specific characteristic
+  
+    indiv_data <- tibble(ID = 1:N, W2 = rnorm(N))
+    
+    # Join them
+    
+    panel_data <- panel_data %>%
+      full_join(indiv_data, by = 'ID') %>%
+      
+      # Create X, caused by W1 and W2
+      
+      mutate(X = 2*W1 + 1.5*W2 + rnorm(n())) %>%
+      
+      # And create Y. The true effect of X on Y is 3
+      
+      # But W1 and W2 have causal effects too
+      
+      mutate(Y = 3*X + W1 - 2*W2 + rnorm(n()))
+    
+    
+    return(panel_data)
+    
+    
+}
+```
+
+
+```{r}
+# take it for a spin
+
+d_pan <- create_panel_data(100, 5)
+
+
+```
+
+
+# Creating Heteroskedasticity
+
+```{r}
+
+# libray(tidyverse)
+
+set.seed(1000)
+
+create_het_data <- function(N = 200){
+  
+  d <- tibble(X = runif(N)) %>%
+    
+    # Let the standard deviation of the error
+    # be related to X. Heteroskedasticity!
+    
+    mutate(Y = 3*X + rnorm(N, sd = X*5))
+  
+  
+    return(d)
+}
+
+
+
+```
+
+```{r}
+# runnin it
+
+d_het <- create_het_data(500)
+
+
+
+```
+
+```{r}
+# visualizing a class "fan" shape we've created
+
+plot(d_het)
+
+
+
+```
+
+
+
+
+
+
