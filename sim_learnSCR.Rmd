@@ -9,6 +9,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Github
+
+```{r}
+
+library(usethis)
+usethis::use_github()
+```
+
+
+
 # Causal Diagram
 
 ```{r}
