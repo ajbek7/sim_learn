@@ -217,6 +217,189 @@ plot(d_het)
 
 # Simulating Clustering
 
+First, we need something to cluster at: some group-identifier.
+
+Then, we can create clustered standard errors by creating or randomly generating a single "group effect" 
+that can be shared by the group itself, adding on individual noise.
+
+In other words, generate an individual-level error term, then an individual/time-level error term,
+and add them together in some fashion to get clustered standard errors.
+
+```{r}
+
+library(tidyverse)
+
+set.seed(1000)
+
+# N for number of individuals, T for time periods
+
+create_clus_data <- function(N = 200, T = 10){
+  
+  # We're going to create errors clustered at the
+  
+  # ID level. So we can follow our steps from making panel data
+  
+  panel_data <- crossing(ID = 1:N, t = 1:T) %>%
+    
+    # Individual/time-varying data
+    
+    mutate(W = runif(n(), 0, 0.1))
+  
+  # Now an individual-specific error cluster
+  
+  indiv_data <- tibble(ID = 1:N,
+                       C = rnorm(N))
+  
+  # Join them
+  
+  panel_data <- panel_data %>%
+    full_join(indiv_data, by = 'ID') %>%
+    
+    # Create X, caused by W1 and W2
+    
+    mutate(X = 2*W + rnorm(n())) %>%
+    
+    # The error term has two components: the individual
+    # cluster C, and the individual-and-time-varying element
+    
+    mutate(Y = 3*X + (C + rnorm(n())))
+  
+  return(panel_data)
+  
+}
+
+
+d_cluster <- create_clus_data(100, 5)
+```
+
+
+# Function to generate panel data and estimate model
+
+
+```{r}
+
+# library(tidyverse)
+
+set.seed(1000)
+
+# A function for estimation
+
+est_model <- function(N, T) {
+  
+  # Get our data. This uses create_clus_data from earlier
+  
+  d <- create_clus_data(N, T)
+  
+  # Run a model that should be unbiased
+  
+  # if clustered errors themselves don't bias us!
+  
+  m <- lm(Y ~ X + W, data = d)
+  
+  # Get the coefficient on X, which should be true value 3 on average
+  
+  x_coef <- coef(m)['X']
+  
+  return(x_coef)
+  
+}
+
+# Run our model
+
+est_model(200, 5)
+
+
+```
+
+
+# Creating Iteration
+
+```{r}
+# library(tidyverse)
+
+library(purrr)
+
+set.seed(1000)
+
+# Estimate our model 1000 times (from 1 to 1000)
+
+estimates <- 1:1000 %>%
+  
+  # Run the est_model function each time
+  
+  map_dbl(function(x) est_model(N = 200, T = 5))
+
+# There are many map functions in purrr. Since est_model outputs a number
+# (a "double"), we can use map_dbl and get a vector of estimates
+
+
+
+
+```
+
+
+# Coding Agus's estimator 
+
+```{r}
+
+# library(tidyverse); library(purrr)
+
+library(broom)
+
+# Data creation function. Let's make the function more flexible
+# so we can choose our own true effect!
+
+create_data <- function(N, true){
+  
+  d <- tibble(X = rnorm(N)) %>%
+    
+    mutate(Y = true*X + rnorm(n()))
+  
+    return(d)
+}
+
+
+# Estimation function. keep is the portion of data in each tail to keep.
+
+# So 0.2 would keep the bottom and top 20% of X
+
+est_model <- function(N, keep, true){
+  
+  d <- create_data(N, true)
+  
+  # Agus' estimator!
+  
+  m <- lm(Y~X, data = d %>%
+            filter(X <= quantile(X, keep) | X >= quantile(X, (1-keep))))
+  
+  # Return coefficient and standard error as two elements of a list
+  
+  ret <- tidy(m)
+  
+  return(list('coef' = ret$estimate[2],
+          'se' = ret$std.error[2]))
+  
+}
+
+
+# Run 1000 simulations. Use map_df to stack all the results
+
+# together in a data frame
+
+results <- 1:1000 %>%
+  
+  map_df(function(x)est_model(N = 1000,
+                              keep = 0.2,
+                              true = 2))
+
+
+mean(results$coef); sd(results$coef); mean(results$se)
+```
+
+
+
+
+
 
 
 
